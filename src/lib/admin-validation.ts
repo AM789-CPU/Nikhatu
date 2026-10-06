@@ -24,7 +24,7 @@ function text(value: unknown, max: number) {
   return typeof value === "string" && value.trim().length > 0 && value.trim().length <= max ? value.trim() : null;
 }
 
-function validImage(value: unknown) {
+function validImage(value: unknown): value is string {
   if (typeof value !== "string" || value.length > 2048) return false;
   if (value.startsWith("/") && !value.startsWith("//") && !value.includes("\\")) return true;
   try {
@@ -42,13 +42,14 @@ export function parseAdminProduct(value: unknown): AdminProductInput | null {
   const department = text(value.department, 10);
   const category = text(value.category, 80);
   const color = text(value.color, 80);
+  const image = value.image;
   const colorHex = typeof value.colorHex === "string" && /^#[\da-f]{6}$/i.test(value.colorHex) ? value.colorHex : null;
   const badge = value.badge === null || value.badge === "" ? null : text(value.badge, 40);
   const originalPrice = value.originalPrice === null || value.originalPrice === "" ? null : value.originalPrice;
   const sizes = value.sizes;
 
   if (!name || !description || !department || !departments.has(department) || !category || !color || !colorHex) return null;
-  if (!validImage(value.image) || !Number.isSafeInteger(value.price) || (value.price as number) < 1 || (value.price as number) > 10_000_000) return null;
+  if (!validImage(image) || !Number.isSafeInteger(value.price) || (value.price as number) < 1 || (value.price as number) > 10_000_000) return null;
   if (originalPrice !== null && (!Number.isSafeInteger(originalPrice) || (originalPrice as number) < 0 || (originalPrice as number) > 10_000_000)) return null;
   if (value.badge !== null && value.badge !== "" && !badge) return null;
   if (!Array.isArray(sizes) || sizes.length < 1 || sizes.length > 32 || sizes.some((size) => typeof size !== "string" || !size.trim() || size.trim().length > 24)) return null;
@@ -63,7 +64,7 @@ export function parseAdminProduct(value: unknown): AdminProductInput | null {
     category,
     price: value.price as number,
     originalPrice: originalPrice as number | null,
-    image: value.image.trim(),
+    image: image.trim(),
     color,
     colorHex,
     sizes: normalizedSizes,
