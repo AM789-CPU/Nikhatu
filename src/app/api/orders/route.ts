@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const requested = body.items as { productId: string; size: string; quantity: number }[];
     if (!Array.isArray(requested) || !requested.length || requested.length > 30) return Response.json({ error: "Your bag is empty or too large." }, { status: 400 });
     if (requested.some((item) => !item || typeof item.productId !== "string" || typeof item.size !== "string" || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 10)) return Response.json({ error: "Please check your bag quantities." }, { status: 400 });
-    const catalogue = await db.select().from(products).where(inArray(products.id, requested.map((item) => item.productId)));
+    const catalogue = await db.select().from(products).where(and(eq(products.isActive, true), inArray(products.id, requested.map((item) => item.productId))));
     const items = requested.map((item) => {
       const product = catalogue.find((p) => p.id === item.productId);
       if (!product || !product.sizes.includes(item.size)) throw new Error("One of the selected products or sizes is unavailable.");

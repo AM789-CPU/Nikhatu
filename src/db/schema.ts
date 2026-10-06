@@ -14,6 +14,7 @@ export const products = pgTable("products", {
   sizes: jsonb("sizes").$type<string[]>().notNull(),
   badge: text("badge"),
   featured: boolean("featured").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
 });
 
 export const subscribers = pgTable("subscribers", {
@@ -29,9 +30,23 @@ export const customers = pgTable("customers", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const adminUsers = pgTable("admin_users", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").unique().notNull(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const sessions = pgTable("sessions", {
   token: text("token").primaryKey(),
   customerId: text("customer_id").references(() => customers.id, { onDelete: "cascade" }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
+export const adminSessions = pgTable("admin_sessions", {
+  tokenHash: text("token_hash").primaryKey(),
+  adminUserId: text("admin_user_id").references(() => adminUsers.id, { onDelete: "cascade" }).notNull(),
   expiresAt: timestamp("expires_at").notNull(),
 });
 

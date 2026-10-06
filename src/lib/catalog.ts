@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import { products } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export type Product = typeof products.$inferSelect;
 
@@ -23,12 +24,19 @@ const catalogue: typeof products.$inferInsert[] = [
 export async function getProducts(): Promise<Product[]> {
   try {
     await db.insert(products).values(catalogue).onConflictDoNothing();
-    const rows = (await db.select().from(products)).filter((r) => catalogue.some((c) => c.id === r.id));
-    return rows.sort((a, b) => catalogue.findIndex((p) => p.id === a.id) - catalogue.findIndex((p) => p.id === b.id));
+    const rows = await db.select().from(products).where(eq(products.isActive, true));
+    return rows.sort((a, b) => {
+      const aPosition = catalogue.findIndex((product) => product.id === a.id);
+      const bPosition = catalogue.findIndex((product) => product.id === b.id);
+      if (aPosition >= 0 && bPosition >= 0) return aPosition - bPosition;
+      if (aPosition >= 0) return -1;
+      if (bPosition >= 0) return 1;
+      return Number(b.featured) - Number(a.featured) || a.name.localeCompare(b.name);
+    });
   } catch (error) {
     // No DB / tables missing: still show the storefront from the built-in catalogue.
     console.error("getProducts fell back to static catalogue:", error);
-    return catalogue.map((p) => ({ ...p, originalPrice: p.originalPrice ?? null, badge: p.badge ?? null, featured: p.featured ?? false })) as Product[];
+    return catalogue.map((p) => ({ ...p, originalPrice: p.originalPrice ?? null, badge: p.badge ?? null, featured: p.featured ?? false, isActive: true })) as Product[];
   }
 }
 
