@@ -1,0 +1,35 @@
+import { db } from "@/db";
+import { products } from "@/db/schema";
+
+export type Product = typeof products.$inferSelect;
+
+const catalogue: typeof products.$inferInsert[] = [
+  { id: "classic-chore-jacket", name: "The Indigo Chore Jacket", description: "Heavy washed indigo denim with three utility pockets and brass buttons. A premium everyday layer that only gets better with wear.", department: "men", category: "Jackets", price: 3999, originalPrice: 4999, image: "/images/classic/chore-jacket.jpg", color: "Indigo", colorHex: "#1f3a6b", sizes: ["S", "M", "L", "XL", "XXL"], badge: "BESTSELLER", featured: true },
+  { id: "classic-grey-pinstripe", name: "The Grey Pinstripe Shirt", description: "Textured slate-grey cotton with crisp white stripes and a classic collar. Smart on its own, easy under a jacket.", department: "men", category: "Shirts", price: 2299, originalPrice: 2899, image: "/images/classic/grey-stripe.jpg", color: "Slate grey", colorHex: "#7b7b7b", sizes: ["S", "M", "L", "XL", "XXL"], badge: "NEW IN", featured: true },
+  { id: "classic-trucker", name: "The Burgundy Trucker Jacket", description: "A washed burgundy denim trucker with twin chest pockets and antique metal buttons. Rich colour, timeless cut.", department: "men", category: "Jackets", price: 4299, originalPrice: 5399, image: "/images/classic/trucker.jpg", color: "Burgundy", colorHex: "#5c1f26", sizes: ["S", "M", "L", "XL", "XXL"], badge: "NEW IN", featured: true },
+  { id: "classic-burgundy-stripe", name: "The Burgundy Stripe Shirt", description: "Deep burgundy with fine cream pinstripes in a crisp cotton poplin. Roll the cuffs and go.", department: "women", category: "Shirts", price: 2199, originalPrice: 2799, image: "/images/classic/burgundy-stripe.jpg", color: "Burgundy", colorHex: "#6b1a28", sizes: ["XS", "S", "M", "L", "XL"], badge: "BESTSELLER", featured: true },
+  { id: "classic-plaid-shirt", name: "The Sage Plaid Shirt", description: "Soft brushed cotton in a calm sage and cream plaid. Relaxed fit, chest pocket, easy all season.", department: "women", category: "Shirts", price: 2199, originalPrice: 2799, image: "/images/classic/plaid.jpg", color: "Sage plaid", colorHex: "#9fb3b0", sizes: ["XS", "S", "M", "L", "XL"], badge: "NEW IN", featured: false },
+  { id: "classic-rugby-polo", name: "The Rugby Stripe Polo", description: "A heavyweight rugby polo in cream and burgundy block stripes, with a soft collar and rolled cuffs.", department: "kids", category: "Polos", price: 1299, originalPrice: 1699, image: "/images/classic/rugby.jpg", color: "Cream / Burgundy", colorHex: "#6b1a28", sizes: ["6–7 Y", "8–9 Y", "10–11 Y", "12–13 Y"], badge: "NEW IN", featured: false },
+  { id: "monster-saint-olive-jacket", name: "The Saint Olive Flame Jacket", description: "Washed olive work jacket with chenille Saint lettering, airbrushed flames down the sleeves and heavily distressed trims. Loud, worn-in, one of a kind.", department: "men", category: "Jackets", price: 5499, originalPrice: 6999, image: "/images/monster/collection/saint-olive-jacket.jpg", color: "Washed olive", colorHex: "#6b7a55", sizes: ["S", "M", "L", "XL", "XXL"], badge: "BESTSELLER", featured: true },
+  { id: "monster-money-tee", name: "All We Need Is Money Tee", description: "Heavy washed-olive tee with a dripping spray-paint message across the front. Oversized, boxy and made to be worn loud.", department: "men", category: "Tees", price: 1699, originalPrice: 2199, image: "/images/monster/collection/money-tee.jpg", color: "Washed olive", colorHex: "#5b5a47", sizes: ["S", "M", "L", "XL", "XXL"], badge: "BESTSELLER", featured: true },
+  { id: "monster-gothic-jeans", name: "The Gothic Print Wide-Leg Jeans", description: "Black wide-leg denim covered in a collage of crosses, stars, chains and moons, with a scatter of tiny studs. Pure night energy.", department: "men", category: "Jeans", price: 4199, originalPrice: 5299, image: "/images/monster/collection/gothic-jeans.jpg", color: "Black", colorHex: "#151518", sizes: ["S", "M", "L", "XL", "XXL"], badge: "NEW IN", featured: true },
+  { id: "monster-saints-sweatshirt", name: "The Saints Vintage Waffle Sweatshirt", description: "Distressed waffle-knit crew with gothic cross artwork and script lettering. Cropped, boxy and beautifully ruined at the edges.", department: "women", category: "Sweatshirts", price: 2999, originalPrice: 3799, image: "/images/monster/collection/saints-sweatshirt.jpg", color: "Bone white", colorHex: "#d9d6cf", sizes: ["XS", "S", "M", "L", "XL"], badge: "NEW IN", featured: true },
+  { id: "monster-saint-denim-jacket", name: "The Saint Tears Denim Jacket", description: "Faded blue work jacket with a corduroy collar, stitched Saint patches and a torn art-dept label. Vintage attitude, zero polish.", department: "men", category: "Jackets", price: 5999, originalPrice: 7499, image: "/images/monster/collection/saint-denim-jacket.jpg", color: "Faded indigo", colorHex: "#4a5568", sizes: ["S", "M", "L", "XL", "XXL"], badge: "NEW IN", featured: false },
+  { id: "monster-scribble-tee", name: "The Scribble Graphic Tee", description: "Acid-washed charcoal tee scratched with a signature scribble and finished with black bead embroidery.", department: "men", category: "Tees", price: 1799, originalPrice: 2299, image: "/images/monster/collection/scribble-tee.jpg", color: "Charcoal", colorHex: "#3a3a3d", sizes: ["S", "M", "L", "XL", "XXL"], badge: "NEW IN", featured: false },
+  { id: "monster-starburst-jeans", name: "The Starburst Wide-Leg Jeans", description: "Washed charcoal denim with heavy whiskering and hand-drawn starbursts along the side seams. Balloon fit, big attitude.", department: "women", category: "Jeans", price: 3699, originalPrice: 4599, image: "/images/monster/collection/starburst-jeans.jpg", color: "Washed charcoal", colorHex: "#4a4a4d", sizes: ["XS", "S", "M", "L", "XL"], badge: "NEW IN", featured: false },
+  { id: "monster-melancholy-thermal", name: "The Melancholy Thermal Shirt", description: "Soft white thermal with a gothic castle print and script lettering running down both sleeves.", department: "kids", category: "Thermals", price: 1599, originalPrice: 1999, image: "/images/monster/collection/melancholy-thermal.jpg", color: "White / Black", colorHex: "#e9e9e9", sizes: ["8–9 Y", "10–11 Y", "12–13 Y", "14–15 Y"], badge: "NEW IN", featured: false },
+];
+
+export async function getProducts(): Promise<Product[]> {
+  try {
+    await db.insert(products).values(catalogue).onConflictDoNothing();
+    const rows = (await db.select().from(products)).filter((r) => catalogue.some((c) => c.id === r.id));
+    return rows.sort((a, b) => catalogue.findIndex((p) => p.id === a.id) - catalogue.findIndex((p) => p.id === b.id));
+  } catch (error) {
+    // No DB / tables missing: still show the storefront from the built-in catalogue.
+    console.error("getProducts fell back to static catalogue:", error);
+    return catalogue.map((p) => ({ ...p, originalPrice: p.originalPrice ?? null, badge: p.badge ?? null, featured: p.featured ?? false })) as Product[];
+  }
+}
+
+export const formatPrice = (value: number) => `₹${value.toLocaleString("en-IN")}`;
