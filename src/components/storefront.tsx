@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
 import Link from "next/link";
 import { ArrowRight, ArrowUp, ArrowUpRight, Check, Heart, Menu, Search, ShieldCheck, ShoppingBag, Truck, UserRound, X, RotateCcw, LockKeyhole } from "lucide-react";
 import { Hero } from "@/components/hero";
 import { ProductCard } from "@/components/product-card";
+import ProductMediaGallery from "@/components/product-media-gallery";
 import { AccountPanel, CartPanel, CheckoutPanel, InfoPanel, ProductDetail, SearchPanel, TrackPanel, WishlistPanel } from "@/components/store-dialogs";
 import { type Product, type Theme, themeOf } from "@/lib/products";
 import { ThemeIntro } from "@/components/theme-intro";
@@ -20,10 +21,61 @@ const tiles: Record<Theme, string[]> = {
   monster: ["/images/monster/collection/saint-olive-jacket.jpg", "/images/monster/collection/saints-sweatshirt.jpg", "/images/monster/collection/melancholy-thermal.jpg"],
 };
 
+const storefrontStorageKeys = ["nikhatu-bag", "nikhatu-wishlist", "nikhatu-last-order", "nikhatu-theme"];
+const storefrontStorageEvent = "nikhatu:storage-change";
+
+function subscribeToStorefrontStorage(onChange: () => void) {
+  const handleStorage = (event: Event) => {
+    if (event.type === "storage") {
+      const storageEvent = event as StorageEvent;
+      if (storageEvent.key !== null && !storefrontStorageKeys.includes(storageEvent.key)) return;
+    }
+    onChange();
+  };
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener(storefrontStorageEvent, handleStorage);
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener(storefrontStorageEvent, handleStorage);
+  };
+}
+
+function getStorefrontStorageSnapshot() {
+  try {
+    return JSON.stringify(storefrontStorageKeys.map((key) => localStorage.getItem(key)));
+  } catch {
+    return "[null,null,null,null]";
+  }
+}
+
+function getServerStorageSnapshot() {
+  return "[null,null,null,null]";
+}
+
+function writeStorefrontStorage(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+    window.dispatchEvent(new Event(storefrontStorageEvent));
+  } catch { /* Storage may be unavailable or full. */ }
+}
+
 export default function Storefront({ products, shopping = false, initialCategory = "all", initialSort = "featured" }: { products: Product[]; shopping?: boolean; initialCategory?: string; initialSort?: string }) {
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [wishlist, setWishlist] = useState<string[]>([]);
-  const [hydrated, setHydrated] = useState(false);
+  const storageSnapshot = useSyncExternalStore(subscribeToStorefrontStorage, getStorefrontStorageSnapshot, getServerStorageSnapshot);
+  const [cartSnapshot, wishlistSnapshot, lastOrderSnapshot, themeSnapshot] = JSON.parse(storageSnapshot) as [string | null, string | null, string | null, string | null];
+  const cart = useMemo(() => {
+    try {
+      const savedCart: unknown = JSON.parse(cartSnapshot || "[]");
+      return Array.isArray(savedCart) ? savedCart.filter((item): item is CartItem => !!item && typeof item.productId === "string" && typeof item.size === "string" && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 10 && products.some((product) => product.id === item.productId && product.sizes.includes(item.size))) : [];
+    } catch { return []; }
+  }, [cartSnapshot, products]);
+  const wishlist = useMemo(() => {
+    try {
+      const savedWishlist: unknown = JSON.parse(wishlistSnapshot || "[]");
+      return Array.isArray(savedWishlist) ? savedWishlist.filter((id): id is string => typeof id === "string" && products.some((product) => product.id === id)) : [];
+    } catch { return []; }
+  }, [products, wishlistSnapshot]);
+  const lastOrder = lastOrderSnapshot || "";
+  const theme: Theme = themeSnapshot === "monster" ? "monster" : "classic";
   const [panel, setPanel] = useState<Panel>(null);
   const [selected, setSelected] = useState<Product | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -31,33 +83,24 @@ export default function Storefront({ products, shopping = false, initialCategory
   const [style, setStyle] = useState("all");
   const [sort, setSort] = useState(initialSort);
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [theme, setTheme] = useState<Theme>("classic");
   const [intro, setIntro] = useState<Theme | null>(null);
   const [toast, setToast] = useState("");
-  const [lastOrder, setLastOrder] = useState("");
   const [newsletterStatus, setNewsletterStatus] = useState("");
   const [newsletterBusy, setNewsletterBusy] = useState(false);
 
-  useEffect(() => {
-    try {
-      const savedCart: unknown = JSON.parse(localStorage.getItem("nikhatu-bag") || "[]");
-      const savedWishlist: unknown = JSON.parse(localStorage.getItem("nikhatu-wishlist") || "[]");
-      if (Array.isArray(savedCart)) setCart(savedCart.filter((item): item is CartItem => !!item && typeof item.productId === "string" && typeof item.size === "string" && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 10 && products.some((p) => p.id === item.productId && p.sizes.includes(item.size))));
-      if (Array.isArray(savedWishlist)) setWishlist(savedWishlist.filter((id): id is string => typeof id === "string" && products.some((p) => p.id === id)));
-      setLastOrder(localStorage.getItem("nikhatu-last-order") || "");
-    } catch { /* Invalid local storage is safely ignored. */ }
-    setHydrated(true);
-    fetch("/api/auth").then((r) => r.json()).then((data) => setCustomer(data.customer ?? null)).catch(() => {});
-  }, [products]);
+  function setCart(update: CartItem[] | ((current: CartItem[]) => CartItem[])) {
+    const next = typeof update === "function" ? update(cart) : update;
+    writeStorefrontStorage("nikhatu-bag", JSON.stringify(next));
+  }
 
-  useEffect(() => { if (hydrated) { try { localStorage.setItem("nikhatu-bag", JSON.stringify(cart)); } catch {} } }, [cart, hydrated]);
-  useEffect(() => { if (hydrated) { try { localStorage.setItem("nikhatu-wishlist", JSON.stringify(wishlist)); } catch {} } }, [wishlist, hydrated]);
-  useEffect(() => {
-    try { if (localStorage.getItem("nikhatu-theme") === "monster") setTheme("monster"); } catch {}
-  }, []);
+  function setWishlist(update: string[] | ((current: string[]) => string[])) {
+    const next = typeof update === "function" ? update(wishlist) : update;
+    writeStorefrontStorage("nikhatu-wishlist", JSON.stringify(next));
+  }
+
+  useEffect(() => { fetch("/api/auth").then((r) => r.json()).then((data) => setCustomer(data.customer ?? null)).catch(() => {}); }, []);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem("nikhatu-theme", theme); } catch {}
   }, [theme]);
   useEffect(() => {
     if (!toast) return;
@@ -83,7 +126,7 @@ export default function Storefront({ products, shopping = false, initialCategory
   }
 
   function applyTheme(next: Theme) {
-    setTheme(next); setStyle("all");
+    writeStorefrontStorage("nikhatu-theme", next); setStyle("all");
     setToast(next === "monster" ? "Monster mode on. Welcome to the dark side." : "Back to Classic.");
   }
 
@@ -114,8 +157,7 @@ export default function Storefront({ products, shopping = false, initialCategory
   function showInfo(topic: InfoTopic) { setPanel(topic); }
 
   function orderComplete(order: PlacedOrder) {
-    setCart([]); setLastOrder(order.orderNumber);
-    try { localStorage.setItem("nikhatu-last-order", order.orderNumber); } catch {}
+    setCart([]); writeStorefrontStorage("nikhatu-last-order", order.orderNumber);
   }
 
   async function subscribe(event: FormEvent<HTMLFormElement>) {
@@ -154,13 +196,19 @@ export default function Storefront({ products, shopping = false, initialCategory
         <div className="collection-toolbar"><div className="department-tabs" role="group" aria-label="Filter by department">{departments.map((department) => <button key={department} className={category === department ? "active" : ""} aria-pressed={category === department} onClick={() => { setCategory(department); setStyle("all"); }}>{department === "all" ? "All" : department.charAt(0).toUpperCase() + department.slice(1)}</button>)}</div><div className="catalogue-selects">{shopping && <label><span className="sr-only">Filter by style</span><select value={style} onChange={(event) => setStyle(event.target.value)}><option value="all">All styles</option>{[...new Set([...styleOptions[theme], ...themeProducts.map((product) => product.category)])].map((name) => <option key={name}>{name}</option>)}</select></label>}<label><span className="sort-label">SORT BY:</span><select aria-label="Sort products" value={sort} onChange={(event) => setSort(event.target.value)}><option value="featured">Featured</option><option value="new">Newest arrivals</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option></select></label></div></div>
         <div className="product-grid">{visibleProducts.map((product) => <ProductCard key={product.id} product={product} saved={wishlist.includes(product.id)} onSave={toggleWishlist} onOpen={openProduct} />)}</div>
         {visibleProducts.length === 0 && <div className="catalogue-empty"><p>No pieces in this edit just yet.</p><button className="underlined-link" onClick={() => { setCategory("all"); setStyle("all"); }}>EXPLORE ALL PIECES <ArrowRight size={14} /></button></div>}
-        {!shopping && <div className="collection-bottom"><p>Good style doesn't have to try so hard.</p><Link href="/shop" className="button button-outline">FIND YOUR EVERYDAY <ArrowRight size={16} /></Link></div>}
+        {!shopping && <div className="collection-bottom"><p>Good style does not have to try so hard.</p><Link href="/shop" className="button button-outline">FIND YOUR EVERYDAY <ArrowRight size={16} /></Link></div>}
       </section>
       <section className="brand-statement"><span className="eyebrow">NOT JUST A LABEL. A WAY OF BEING.</span><h2>Indian at heart.<br /><span>Individual by nature.</span></h2><div><p>We believe the best clothes feel like you.<br />Considered details. Honest fabrics. No unnecessary noise.<br />Made in India, for the way you move through the world.</p><button className="underlined-link" onClick={() => showInfo("story")}>MEET NIKHATU <ArrowUpRight size={15} /></button></div><span className="brand-star" aria-hidden="true">✳</span></section>
       <section className="newsletter-section"><div><span className="eyebrow">GOOD THINGS, BEFORE EVERYONE ELSE.</span><h2>Be in the know.</h2><p>New drops, fresh perspectives, and a little NIKHATU in your inbox.</p></div><div className="newsletter-form-wrap"><form onSubmit={subscribe}><label className="sr-only" htmlFor="newsletter-email">Your email address</label><input id="newsletter-email" type="email" name="email" placeholder="Your email address" required maxLength={254} /><button type="submit" disabled={newsletterBusy} aria-label="Subscribe to the NIKHATU newsletter">{newsletterBusy ? <span className="spinner" /> : <ArrowRight size={23} strokeWidth={1.2} />}</button></form><p className="newsletter-note" aria-live="polite">{newsletterStatus || "Only the good stuff. Unsubscribe whenever."}</p></div></section>
     </main>
     <footer className="site-footer"><div className="footer-top"><div className="footer-brand"><Link href="/" className="footer-wordmark">NIKHATU<span>®</span></Link><p>Rooted in India.<br />Ready for everywhere.</p><span className="made-in-india"><span /> PROUDLY MADE IN INDIA</span></div><div className="footer-link-group"><h3>FIND YOUR FIT</h3><Link href="/shop?category=men">Men</Link><Link href="/shop?category=women">Women</Link><Link href="/shop?category=kids">Kids</Link><Link href="/shop?sort=new">New arrivals</Link></div><div className="footer-link-group"><h3>HERE TO HELP</h3><button onClick={() => setPanel("track")}>Track your order</button><button onClick={() => showInfo("delivery")}>Shipping & delivery</button><button onClick={() => showInfo("returns")}>Returns & exchanges</button><button onClick={() => showInfo("size")}>Size guide</button></div><div className="footer-link-group"><h3>A LITTLE ABOUT US</h3><button onClick={() => showInfo("story")}>Our story</button><button onClick={() => showInfo("quality")}>Our promise</button><button onClick={() => showInfo("help")}>Get in touch</button><button onClick={() => showInfo("privacy")}>Privacy policy</button></div><button className="back-to-top" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="Back to top"><ArrowUp size={21} strokeWidth={1.2} /></button></div><div className="footer-bottom"><span>© 2026 NIKHATU. ALL YOURS.</span><span className="footer-closing">GOOD CLOTHES. GOOD ENERGY.</span><span><LockKeyhole size={12} /> SECURE CHECKOUT · PAY ON DELIVERY</span></div></footer>
-    {selected && <ProductDetail product={selected} saved={wishlist.includes(selected.id)} onClose={closePanel} onSave={() => toggleWishlist(selected.id)} onAdd={addToCart} />}
+    {selected && <>
+      <ProductDetail product={selected} saved={wishlist.includes(selected.id)} onClose={closePanel} onSave={() => toggleWishlist(selected.id)} onAdd={addToCart} />
+      {selected.media?.length ? <ProductMediaGallery key={selected.id} productName={selected.name} media={selected.media} /> : null}
+      {(selected.images?.length ?? 0) > 1 && <div className="product-gallery-controls" role="group" aria-label={`${selected.name} images`}>
+        {selected.images!.map((image, index) => <button key={image.id} type="button" className={selected.image === image.url ? "active" : ""} onClick={() => setSelected((current) => current ? { ...current, image: image.url } : null)} aria-label={`View image ${index + 1} of ${selected.images!.length}`} aria-pressed={selected.image === image.url}><img src={image.url} alt="" /></button>)}
+      </div>}
+    </>}
     {panel === "cart" && <CartPanel products={products} items={cart} subtotal={subtotal} onClose={closePanel} onQuantity={updateQuantity} onRemove={removeFromCart} onCheckout={() => setPanel("checkout")} />}
     {panel === "wishlist" && <WishlistPanel products={products.filter((p) => wishlist.includes(p.id))} onClose={closePanel} onOpen={openProduct} onRemove={toggleWishlist} />}
     {panel === "search" && <SearchPanel products={themeProducts} onClose={closePanel} onOpen={openProduct} />}

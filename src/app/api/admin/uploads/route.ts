@@ -1,9 +1,12 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { getAdmin } from "@/lib/admin-auth";
 
-const imageTypes = ["image/jpeg", "image/png", "image/webp"];
+const rasterTypes = ["image/jpeg", "image/png", "image/webp"];
 const imagePath = /^products\/product-[a-f0-9-]+\.(?:jpg|png|webp)$/i;
+const framePath = /^products\/360\/product-[a-f0-9-]+\.(?:jpg|png|webp)$/i;
+const videoPath = /^products\/videos\/product-[a-f0-9-]+\.(?:mp4|webm)$/i;
 const maxImageSize = 5 * 1024 * 1024;
+const maxVideoSize = 100 * 1024 * 1024;
 
 export async function POST(request: Request) {
   try {
@@ -13,10 +16,11 @@ export async function POST(request: Request) {
       body,
       onBeforeGenerateToken: async (pathname) => {
         if (!(await getAdmin())) throw new Error("Unauthorized");
-        if (!imagePath.test(pathname)) throw new Error("Invalid product image path");
+        const isVideo = videoPath.test(pathname);
+        if (!imagePath.test(pathname) && !framePath.test(pathname) && !isVideo) throw new Error("Invalid product media path");
         return {
-          allowedContentTypes: imageTypes,
-          maximumSizeInBytes: maxImageSize,
+          allowedContentTypes: isVideo ? ["video/mp4", "video/webm"] : rasterTypes,
+          maximumSizeInBytes: isVideo ? maxVideoSize : maxImageSize,
           addRandomSuffix: true,
         };
       },

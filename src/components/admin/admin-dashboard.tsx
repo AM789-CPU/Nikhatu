@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Activity, ArrowUpRight, Bell, Box, ChartNoAxesCombined, ChevronDown, CircleDollarSign, Clock3, LayoutDashboard, LogOut, Package, Plus, Search, Settings, Star, Users, X } from "lucide-react";
 import type { Product } from "@/lib/products";
-import { orderStatuses, type AdminOrderStatus } from "@/lib/admin-validation";
+import { orderStatuses, type AdminOrderStatus, type AdminProductImageInput, type AdminProductMediaInput } from "@/lib/admin-validation";
 import type { OrderLine, ShippingAddress } from "@/db/schema";
-import ProductImageUpload from "@/components/admin/product-image-upload";
+import ProductImageGalleryEditor from "@/components/admin/product-image-gallery-editor";
+import ProductMediaEditor from "@/components/admin/product-media-editor";
 import styles from "./admin-dashboard.module.css";
 
 type Section = "dashboard" | "orders" | "products" | "add-product" | "customers" | "analytics" | "settings";
@@ -26,6 +28,7 @@ const sections: { id: Section; label: string; icon: typeof LayoutDashboard }[] =
 ];
 
 const blankDraft: Draft = { name: "", description: "", department: "men", category: "", price: 0, originalPrice: null, image: "", color: "", colorHex: "#222222", sizes: [], badge: null, featured: false, isActive: true };
+const blankMedia: AdminProductMediaInput = { videos: [], spinFrames: [] };
 const money = (amount: number) => `₹${amount.toLocaleString("en-IN")}`;
 const formatDate = (value: string | Date) => new Date(value).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 const formatDateTime = (value: string | Date) => new Date(value).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
@@ -71,20 +74,29 @@ function SalesChart({ points }: { points: SalePoint[] }) {
   </div>;
 }
 
-export default function AdminDashboard({ adminName }: { adminName: string }) {
+export type AdminDashboardOrder = AdminOrder;
+export type AdminDashboardCustomer = AdminCustomer;
+
+export default function AdminDashboard({ adminName, initialProducts, initialOrders, initialCustomers }: { adminName: string; initialProducts: Product[]; initialOrders: AdminOrder[]; initialCustomers: AdminCustomer[] }) {
   const router = useRouter();
   const [section, setSection] = useState<Section>("dashboard");
-  const [products, setProducts] = useState<Product[]>([]);
-  const [orders, setOrders] = useState<AdminOrder[]>([]);
-  const [customers, setCustomers] = useState<AdminCustomer[]>([]);
+  const [products, setProducts] = useState(initialProducts);
+  const [orders, setOrders] = useState(initialOrders);
+  const [customers, setCustomers] = useState(initialCustomers);
   const [draft, setDraft] = useState<Draft>(blankDraft);
+  const [galleryImages, setGalleryImages] = useState<AdminProductImageInput[]>([]);
+  const [initialMedia, setInitialMedia] = useState<Product["media"]>([]);
+  const [mediaPayload, setMediaPayload] = useState<AdminProductMediaInput>(blankMedia);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sizesText, setSizesText] = useState("");
   const [range, setRange] = useState<7 | 30>(7);
   const [search, setSearch] = useState("");
   const [productFilter, setProductFilter] = useState("active");
   const [busy, setBusy] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageUploadFailed, setImageUploadFailed] = useState(false);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const [mediaUploadFailed, setMediaUploadFailed] = useState(false);
   const [toast, setToast] = useState<{ message: string; kind: "success" | "error" } | null>(null);
 
   async function loadData() {
@@ -101,10 +113,6 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
   }
 
   useEffect(() => {
-    loadData().catch((reason: unknown) => setToast({ message: reason instanceof Error ? reason.message : "Unable to load dashboard data.", kind: "error" }));
-  }, []);
-
-  useEffect(() => {
     if (!toast) return;
     const timer = window.setTimeout(() => setToast(null), 3600);
     return () => window.clearTimeout(timer);
@@ -113,6 +121,9 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
   function startNewProduct() {
     setEditingId(null);
     setDraft(blankDraft);
+    setGalleryImages([]);
+    setInitialMedia([]);
+    setMediaPayload(blankMedia);
     setSizesText("");
     setToast(null);
     setSection("add-product");
@@ -122,6 +133,12 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
     const { id, ...productDraft } = product;
     setEditingId(id);
     setDraft(productDraft);
+    setGalleryImages((product.images?.length ? product.images : [{ url: product.image, sortOrder: 0, isPrimary: true }]).map(({ url, sortOrder, isPrimary }) => ({ url, sortOrder, isPrimary })));
+    setInitialMedia(product.media ?? []);
+    setMediaPayload({
+      videos: (product.media ?? []).filter((item) => item.type === "video").sort((a, b) => a.sortOrder - b.sortOrder).map(({ url }, sortOrder) => ({ url, sortOrder })),
+      spinFrames: (product.media ?? []).filter((item) => item.type === "360").sort((a, b) => a.sortOrder - b.sortOrder).map(({ url }, sortOrder) => ({ url, sortOrder })),
+    });
     setSizesText(product.sizes.join(", "));
     setSection("add-product");
     setToast(null);
@@ -131,6 +148,9 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
   function clearDraft() {
     setEditingId(null);
     setDraft(blankDraft);
+    setGalleryImages([]);
+    setInitialMedia([]);
+    setMediaPayload(blankMedia);
     setSizesText("");
   }
 
@@ -140,14 +160,18 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
 
   async function saveProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (uploading) return;
-    if (!draft.image) {
-      setToast({ message: "Upload one product image before saving.", kind: "error" });
+    if (imageUploading || mediaUploading || imageUploadFailed || mediaUploadFailed) {
+      setToast({ message: "Finish or remove failed media uploads before saving.", kind: "error" });
+      return;
+    }
+    if (!galleryImages.length) {
+      setToast({ message: "Upload at least one product image before saving.", kind: "error" });
       return;
     }
     setBusy(true);
     setToast(null);
-    const payload = { ...draft, sizes: sizesText.split(",").map((size) => size.trim()).filter(Boolean) };
+    const primaryImage = galleryImages.find((image) => image.isPrimary) ?? galleryImages[0];
+    const payload = { ...draft, image: primaryImage.url, images: galleryImages.map((image, sortOrder) => ({ ...image, sortOrder })), media: mediaPayload, sizes: sizesText.split(",").map((size) => size.trim()).filter(Boolean) };
     try {
       const response = await fetch(editingId ? `/api/admin/products/${encodeURIComponent(editingId)}` : "/api/admin/products", {
         method: editingId ? "PUT" : "POST",
@@ -306,17 +330,18 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
         <label>Selling price<input required type="number" min="1" max="10000000" step="1" value={draft.price || ""} onChange={(event) => setField("price", Number(event.target.value))} /></label>
         <label>Original price<input type="number" min="0" max="10000000" step="1" value={draft.originalPrice ?? ""} onChange={(event) => setField("originalPrice", event.target.value === "" ? null : Number(event.target.value))} /></label>
       </div></section>
-      <section className={styles.formPanel}><div className={styles.formSectionHeading}><span>03</span><div><p className={styles.eyebrow}>PRODUCT IMAGE</p><h2>One image, considered</h2></div></div><ProductImageUpload value={draft.image} onChange={(image) => setField("image", image)} onUploadingChange={setUploading} /></section>
-      <section className={styles.formPanel}><div className={styles.formSectionHeading}><span>04</span><div><p className={styles.eyebrow}>VARIANTS</p><h2>Color and sizing</h2></div></div><div className={styles.formGrid}>
+      <section className={styles.formPanel}><div className={styles.formSectionHeading}><span>03</span><div><p className={styles.eyebrow}>PRODUCT IMAGES</p><h2>Choose up to 8 images</h2></div></div><ProductImageGalleryEditor key={editingId ?? "new-product"} initialImages={galleryImages} onChange={setGalleryImages} onStatusChange={(isUploading, failed) => { setImageUploading(isUploading); setImageUploadFailed(failed); }} /></section>
+      <section className={styles.formPanel}><div className={styles.formSectionHeading}><span>04</span><div><p className={styles.eyebrow}>VIDEO & 360° MEDIA</p><h2>Show the piece in motion</h2></div></div><ProductMediaEditor key={`media-${editingId ?? "new-product"}`} initialMedia={initialMedia ?? []} onChange={setMediaPayload} onStatusChange={(isUploading, failed) => { setMediaUploading(isUploading); setMediaUploadFailed(failed); }} /></section>
+      <section className={styles.formPanel}><div className={styles.formSectionHeading}><span>05</span><div><p className={styles.eyebrow}>VARIANTS</p><h2>Color and sizing</h2></div></div><div className={styles.formGrid}>
         <label>Color name<input required maxLength={80} value={draft.color} onChange={(event) => setField("color", event.target.value)} placeholder="Indigo" /></label>
         <label>Color hex<div className={styles.colorField}><input type="color" value={draft.colorHex} onChange={(event) => setField("colorHex", event.target.value)} /><span>{draft.colorHex.toUpperCase()}</span></div></label>
         <label className={styles.formWide}>Sizes <small>Separate sizes with commas</small><input required maxLength={800} value={sizesText} onChange={(event) => setSizesText(event.target.value)} placeholder="XS, S, M, L, XL" /></label>
       </div></section>
-      <section className={styles.formPanel}><div className={styles.formSectionHeading}><span>05</span><div><p className={styles.eyebrow}>STORE SETTINGS</p><h2>Ready for the edit</h2></div></div><div className={styles.formGrid}>
+      <section className={styles.formPanel}><div className={styles.formSectionHeading}><span>06</span><div><p className={styles.eyebrow}>STORE SETTINGS</p><h2>Ready for the edit</h2></div></div><div className={styles.formGrid}>
         <label className={styles.formWide}>Badge <small>Optional</small><input maxLength={40} value={draft.badge ?? ""} onChange={(event) => setField("badge", event.target.value || null)} placeholder="NEW IN" /></label>
         <div className={styles.formWide + " " + styles.switchGroup}><label className={styles.switchRow}><input type="checkbox" checked={draft.featured} onChange={(event) => setField("featured", event.target.checked)} /><span><strong>Featured product</strong><small>Prioritize this piece in curated placements.</small></span></label><label className={styles.switchRow}><input type="checkbox" checked={draft.isActive} onChange={(event) => setField("isActive", event.target.checked)} /><span><strong>Visible in store</strong><small>Customers can discover and order this product.</small></span></label></div>
       </div></section>
-      <div className={styles.stickyActions}><button type="button" className={styles.cancelAction} onClick={() => { clearDraft(); setSection("products"); }}>Cancel</button><button className={styles.primaryAction} disabled={busy || uploading}>{busy ? "Saving..." : uploading ? "Uploading image..." : <><Plus size={16} /> {editingId ? "Save product" : "Save product"}</>}</button></div>
+      <div className={styles.stickyActions}><button type="button" className={styles.cancelAction} onClick={() => { clearDraft(); setSection("products"); }}>Cancel</button><button className={styles.primaryAction} disabled={busy || imageUploading || mediaUploading || imageUploadFailed || mediaUploadFailed}>{busy ? "Saving..." : imageUploading || mediaUploading ? "Uploading media..." : imageUploadFailed || mediaUploadFailed ? "Retry or remove failed media" : <><Plus size={16} /> Save product</>}</button></div>
     </form>;
   }
 
@@ -344,7 +369,7 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
 
   return <div className={styles.adminShell}>
     <aside className={styles.sidebar}>
-      <a href="/" className={styles.sideBrand}><img src="/images/logo-classic.png" alt="NIKHATU" /><span>SELLER STUDIO</span></a>
+      <Link href="/" className={styles.sideBrand}><img src="/images/logo-classic.png" alt="NIKHATU" /><span>SELLER STUDIO</span></Link>
       <div className={styles.sideLabel}>WORKSPACE</div>
       <nav className={styles.sideNav} aria-label="Admin navigation">{sections.map(({ id, label, icon: Icon }) => <button className={section === id ? styles.sideLinkActive : styles.sideLink} key={id} onClick={() => openSection(id)}><Icon size={17} strokeWidth={1.7} /><span>{label}</span>{id === "orders" && pendingOrders > 0 && <small>{pendingOrders}</small>}</button>)}</nav>
       <div className={styles.sidebarBottom}><div className={styles.sideProfile}><span className={styles.profileInitial}>{adminName.trim().charAt(0).toUpperCase()}</span><span><strong>{adminName}</strong><small>Administrator</small></span><ChevronDown size={14} /></div><button className={styles.logoutSide} onClick={signOut}><LogOut size={16} /> Log out</button><span className={styles.sideVersion}>NIKHATU / SELLER STUDIO</span></div>

@@ -16,6 +16,11 @@ export type AdminProductInput = {
   isActive: boolean;
 };
 
+export type AdminProductImageInput = { url: string; sortOrder: number; isPrimary: boolean };
+export type AdminVideoInput = { url: string; sortOrder: number };
+export type AdminSpinFrameInput = { url: string; sortOrder: number };
+export type AdminProductMediaInput = { videos: AdminVideoInput[]; spinFrames: AdminSpinFrameInput[] };
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -79,4 +84,41 @@ export type AdminOrderStatus = (typeof orderStatuses)[number];
 
 export function parseOrderStatus(value: unknown): AdminOrderStatus | null {
   return typeof value === "string" && orderStatuses.some((status) => status === value) ? value as AdminOrderStatus : null;
+}
+
+export function parseAdminProductImages(value: unknown, fallbackImage: string): AdminProductImageInput[] | null {
+  if (value === undefined) return [{ url: fallbackImage, sortOrder: 0, isPrimary: true }];
+  if (!Array.isArray(value) || value.length < 1 || value.length > 8) return null;
+  const images: AdminProductImageInput[] = [];
+  for (const candidate of value) {
+    if (!isRecord(candidate) || !validImage(candidate.url) || !Number.isInteger(candidate.sortOrder) || (candidate.sortOrder as number) < 0 || (candidate.sortOrder as number) > 7 || typeof candidate.isPrimary !== "boolean") return null;
+    images.push({ url: candidate.url, sortOrder: candidate.sortOrder as number, isPrimary: candidate.isPrimary });
+  }
+  if (new Set(images.map((image) => image.url)).size !== images.length) return null;
+  if (new Set(images.map((image) => image.sortOrder)).size !== images.length) return null;
+  if (images.filter((image) => image.isPrimary).length !== 1) return null;
+  return images.sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+export function parseAdminProductMedia(value: unknown): AdminProductMediaInput | null {
+  if (value === undefined) return { videos: [], spinFrames: [] };
+  if (!isRecord(value) || !Array.isArray(value.videos) || !Array.isArray(value.spinFrames) || value.videos.length > 2 || value.spinFrames.length > 36) return null;
+  const parseList = (list: unknown[], kind: "video" | "frame") => {
+    const accepted: { url: string; sortOrder: number }[] = [];
+    for (const item of list) {
+      if (!isRecord(item) || typeof item.url !== "string" || !Number.isInteger(item.sortOrder) || (item.sortOrder as number) < 0 || (item.sortOrder as number) >= (kind === "video" ? 2 : 36)) return null;
+      let parsedUrl: URL;
+      try { parsedUrl = new URL(item.url); } catch { return null; }
+      if (parsedUrl.protocol !== "https:" || parsedUrl.username || parsedUrl.password || item.url.length > 2048) return null;
+      const url = item.url;
+      const pathname = parsedUrl.pathname.toLowerCase();
+      if (kind === "video" ? !/\.(mp4|webm)$/.test(pathname) : !/\.(jpe?g|png|webp)$/.test(pathname)) return null;
+      accepted.push({ url, sortOrder: item.sortOrder as number });
+    }
+    if (new Set(accepted.map((item) => item.url)).size !== accepted.length || new Set(accepted.map((item) => item.sortOrder)).size !== accepted.length) return null;
+    return accepted.sort((a, b) => a.sortOrder - b.sortOrder);
+  };
+  const videos = parseList(value.videos, "video");
+  const spinFrames = parseList(value.spinFrames, "frame");
+  return videos && spinFrames ? { videos, spinFrames } : null;
 }

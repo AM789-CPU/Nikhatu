@@ -47,7 +47,7 @@ function EmptyState({ icon, title, text, onClose }: { icon: ReactNode; title: st
 export function CartPanel({ products, items, subtotal, onClose, onQuantity, onRemove, onCheckout }: { products: Product[]; items: CartItem[]; subtotal: number; onClose: () => void; onQuantity: (id: string, size: string, change: number) => void; onRemove: (id: string, size: string) => void; onCheckout: () => void }) {
   const count = items.reduce((total, item) => total + item.quantity, 0);
   const shipping = subtotal >= 1999 ? 0 : 99;
-  return <DialogShell title={`Your bag (${count}).`} kicker="GOOD CHOICES, ALL YOURS" onClose={onClose} drawer className="bag-panel">{items.length === 0 ? <EmptyState icon={<ShoppingBag size={47} strokeWidth={.8} />} title="A little empty. For now." text="Your next favourite is waiting to be found." onClose={onClose} /> : <><div className="free-delivery"><div>{subtotal >= 1999 ? <><CheckCircle2 size={16} /> You've unlocked free shipping.</> : <>You're {formatPrice(1999 - subtotal)} away from free shipping.</>}</div><div className="delivery-progress"><span style={{ width: `${Math.min(100, subtotal / 1999 * 100)}%` }} /></div></div><div className="bag-items">{items.map((item) => {
+  return <DialogShell title={`Your bag (${count}).`} kicker="GOOD CHOICES, ALL YOURS" onClose={onClose} drawer className="bag-panel">{items.length === 0 ? <EmptyState icon={<ShoppingBag size={47} strokeWidth={.8} />} title="A little empty. For now." text="Your next favourite is waiting to be found." onClose={onClose} /> : <><div className="free-delivery"><div>{subtotal >= 1999 ? <><CheckCircle2 size={16} /> Free shipping unlocked.</> : <>{formatPrice(1999 - subtotal)} away from free shipping.</>}</div><div className="delivery-progress"><span style={{ width: `${Math.min(100, subtotal / 1999 * 100)}%` }} /></div></div><div className="bag-items">{items.map((item) => {
     const product = products.find((p) => p.id === item.productId);
     if (!product) return null;
     return <div className="bag-item" key={`${item.productId}-${item.size}`}><img src={product.image} alt={product.name} /><div className="bag-item-content"><span className="eyebrow muted">{product.department.toUpperCase()}</span><h3>{product.name}</h3><p>{product.color} · Size {item.size}</p><div className="bag-item-bottom"><div className="quantity-stepper small"><button aria-label={`Decrease quantity of ${product.name}`} onClick={() => onQuantity(item.productId, item.size, -1)}><Minus size={12} /></button><span>{item.quantity}</span><button aria-label={`Increase quantity of ${product.name}`} disabled={item.quantity >= 10} onClick={() => onQuantity(item.productId, item.size, 1)}><Plus size={12} /></button></div><strong>{formatPrice(product.price * item.quantity)}</strong></div></div><button className="remove-item" onClick={() => onRemove(item.productId, item.size)} aria-label={`Remove ${product.name} from bag`}><X size={16} /></button></div>;
@@ -84,36 +84,308 @@ export function CheckoutPanel({ products, items, subtotal, customer, onClose, on
     } catch { setError("We couldn't reach checkout. Please try again."); }
     finally { setBusy(false); }
   }
-  return <DialogShell title={order ? "It's officially yours." : "Make it yours."} kicker={order ? "THANK YOU FOR CHOOSING NIKHATU" : "THE LAST STEP TO YOUR NEW EVERYDAY"} onClose={onClose} className="checkout-dialog">{order ? <div className="order-success"><div className="success-symbol"><Check size={35} strokeWidth={1.1} /></div><h3>Good things are on their way.</h3><p>Your order is confirmed. We'll carefully pack your new favourites<br className="desktop-break" /> and get them to you in 4–7 business days.</p><div className="order-reference"><span>YOUR ORDER NUMBER</span><button onClick={async () => { try { await navigator.clipboard.writeText(order.orderNumber); setCopied(true); } catch {} }}>{order.orderNumber}<small>{copied ? "COPIED" : "COPY"}</small></button></div><div className="order-success-total"><span>Pay on delivery</span><strong>{formatPrice(order.total)}</strong></div><p className="save-order-note">Save your order number to track your delivery.</p><button className="button button-dark" onClick={onTrack}>TRACK MY ORDER <ArrowRight size={16} /></button><button className="continue-shopping" onClick={onClose}>Back to the good stuff</button></div> : items.length === 0 ? <EmptyState icon={<ShoppingBag size={45} strokeWidth={1} />} title="Your bag is empty." text="Add a little something before checking out." onClose={onClose} /> : <div className="checkout-grid"><form className="checkout-form" onSubmit={placeOrder}><h3>01 / Where should we send it?</h3><div className="form-grid"><label className="full-field">EMAIL ADDRESS<input type="email" name="email" autoComplete="email" required defaultValue={customer?.email} placeholder="you@example.com" maxLength={254} /></label><label className="full-field">FULL NAME<input name="name" autoComplete="name" required defaultValue={customer?.name} placeholder="Your first and last name" maxLength={100} /></label><label className="full-field">MOBILE NUMBER<input type="tel" name="phone" autoComplete="tel" required placeholder="10-digit Indian mobile number" minLength={10} maxLength={14} /></label><label className="full-field">SHIPPING ADDRESS<input name="line1" autoComplete="street-address" required placeholder="House, street, and area" maxLength={250} /></label><label>CITY<input name="city" autoComplete="address-level2" required placeholder="Your city" maxLength={100} /></label><label>PIN CODE<input name="pincode" autoComplete="postal-code" required placeholder="6-digit PIN" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} /></label><label className="full-field">STATE<select name="state" aria-label="STATE" autoComplete="address-level1" required defaultValue=""><option value="" disabled>Select your state</option>{states.map((state) => <option key={state}>{state}</option>)}</select></label></div><h3 className="payment-heading">02 / Keep it simple.</h3><label className="payment-option"><input type="radio" name="payment" defaultChecked value="cod" /><span><strong>Pay on delivery</strong><small>No payment now. Pay when your order arrives.</small></span><LockKeyhole size={18} strokeWidth={1.2} /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="button button-dark place-order-button" type="submit" disabled={busy}>{busy ? "PLACING YOUR ORDER…" : `PLACE ORDER · ${formatPrice(subtotal + shipping)}`} {!busy && <ArrowRight size={16} />}</button><p className="checkout-terms">By placing your order, you agree to our shipping and returns policy. All prices include taxes.</p></form><aside className="checkout-summary"><h3>The good choices.</h3><div className="checkout-items">{items.map((item) => { const p = products.find((product) => product.id === item.productId); return p ? <div key={`${item.productId}-${item.size}`}><img src={p.image} alt={p.name} /><span><strong>{p.name}</strong><small>Size {item.size} · Qty {item.quantity}</small><b>{formatPrice(p.price * item.quantity)}</b></span></div> : null; })}</div><div className="checkout-totals"><div><span>Subtotal</span><strong>{formatPrice(subtotal)}</strong></div><div><span>Shipping</span><span>{shipping === 0 ? "ON US" : formatPrice(shipping)}</span></div><div className="checkout-grand-total"><span>Total</span><strong>{formatPrice(subtotal + shipping)}</strong></div></div><span className="secure-note"><LockKeyhole size={13} /> YOUR DETAILS ARE IN SAFE HANDS</span></aside></div>}</DialogShell>;
+  return <DialogShell title={order ? "Your order is on its way." : "Make it yours."} kicker={order ? "THANK YOU FOR CHOOSING NIKHATU" : "THE LAST STEP TO YOUR NEW EVERYDAY"} onClose={onClose} className="checkout-dialog">{order ? <div className="order-success"><div className="success-symbol"><Check size={35} strokeWidth={1.1} /></div><h3>Good things are on their way.</h3><p>Your order is confirmed. We will carefully pack your new favourites<br className="desktop-break" /> and get them to you in 4–7 business days.</p><div className="order-reference"><span>YOUR ORDER NUMBER</span><button onClick={async () => { try { await navigator.clipboard.writeText(order.orderNumber); setCopied(true); } catch {} }}>{order.orderNumber}<small>{copied ? "COPIED" : "COPY"}</small></button></div><div className="order-success-total"><span>Pay on delivery</span><strong>{formatPrice(order.total)}</strong></div><p className="save-order-note">Save your order number to track your delivery.</p><button className="button button-dark" onClick={onTrack}>TRACK MY ORDER <ArrowRight size={16} /></button><button className="continue-shopping" onClick={onClose}>Back to the good stuff</button></div> : items.length === 0 ? <EmptyState icon={<ShoppingBag size={45} strokeWidth={1} />} title="Your bag is empty." text="Add a little something before checking out." onClose={onClose} /> : <div className="checkout-grid"><form className="checkout-form" onSubmit={placeOrder}><h3>01 / Where should we send it?</h3><div className="form-grid"><label className="full-field">EMAIL ADDRESS<input type="email" name="email" autoComplete="email" required defaultValue={customer?.email} placeholder="you@example.com" maxLength={254} /></label><label className="full-field">FULL NAME<input name="name" autoComplete="name" required defaultValue={customer?.name} placeholder="Your first and last name" maxLength={100} /></label><label className="full-field">MOBILE NUMBER<input type="tel" name="phone" autoComplete="tel" required placeholder="10-digit Indian mobile number" minLength={10} maxLength={14} /></label><label className="full-field">SHIPPING ADDRESS<input name="line1" autoComplete="street-address" required placeholder="House, street, and area" maxLength={250} /></label><label>CITY<input name="city" autoComplete="address-level2" required placeholder="Your city" maxLength={100} /></label><label>PIN CODE<input name="pincode" autoComplete="postal-code" required placeholder="6-digit PIN" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} /></label><label className="full-field">STATE<select name="state" aria-label="STATE" autoComplete="address-level1" required defaultValue=""><option value="" disabled>Select your state</option>{states.map((state) => <option key={state}>{state}</option>)}</select></label></div><h3 className="payment-heading">02 / Keep it simple.</h3><label className="payment-option"><input type="radio" name="payment" defaultChecked value="cod" /><span><strong>Pay on delivery</strong><small>No payment now. Pay when your order arrives.</small></span><LockKeyhole size={18} strokeWidth={1.2} /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="button button-dark place-order-button" type="submit" disabled={busy}>{busy ? "PLACING YOUR ORDER…" : `PLACE ORDER · ${formatPrice(subtotal + shipping)}`} {!busy && <ArrowRight size={16} />}</button><p className="checkout-terms">By placing your order, you agree to our shipping and returns policy. All prices include taxes.</p></form><aside className="checkout-summary"><h3>The good choices.</h3><div className="checkout-items">{items.map((item) => { const p = products.find((product) => product.id === item.productId); return p ? <div key={`${item.productId}-${item.size}`}><img src={p.image} alt={p.name} /><span><strong>{p.name}</strong><small>Size {item.size} · Qty {item.quantity}</small><b>{formatPrice(p.price * item.quantity)}</b></span></div> : null; })}</div><div className="checkout-totals"><div><span>Subtotal</span><strong>{formatPrice(subtotal)}</strong></div><div><span>Shipping</span><span>{shipping === 0 ? "ON US" : formatPrice(shipping)}</span></div><div className="checkout-grand-total"><span>Total</span><strong>{formatPrice(subtotal + shipping)}</strong></div></div><span className="secure-note"><LockKeyhole size={13} /> YOUR DETAILS ARE IN SAFE HANDS</span></aside></div>}</DialogShell>;
 }
 
-export function AccountPanel({ customer, onClose, onCustomer }: { customer: Customer | null; onClose: () => void; onCustomer: (customer: Customer | null) => void }) {
+ export function AccountPanel({
+  customer,
+  onClose,
+  onCustomer,
+}: {
+  customer: Customer | null;
+  onClose: () => void;
+  onCustomer: (customer: Customer | null) => void;
+}) {
   const [register, setRegister] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [orders, setOrders] = useState<OrderSummary[]>([]);
-  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [ordersLoadedFor, setOrdersLoadedFor] = useState<string | null>(null);
+
+  const loadingOrders =
+    customer !== null && ordersLoadedFor !== customer.id;
+
   useEffect(() => {
     if (!customer) return;
-    setLoadingOrders(true);
-    fetch("/api/auth").then((r) => r.json()).then((data) => setOrders(data.orders ?? [])).catch(() => setError("Couldn't load your orders right now.")).finally(() => setLoadingOrders(false));
+
+    let active = true;
+
+    fetch("/api/auth")
+      .then((response) => response.json())
+      .then((data) => {
+        if (active) setOrders(data.orders ?? []);
+      })
+      .catch(() => {
+        if (active) setError("Couldn't load your orders right now.");
+      })
+      .finally(() => {
+        if (active) setOrdersLoadedFor(customer.id);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [customer]);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError("");
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+
     const data = new FormData(event.currentTarget);
+
     try {
-      const response = await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: register ? "register" : "login", name: data.get("name"), email: data.get("email"), password: data.get("password") }) });
+      const response = await fetch("/api/auth", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: register ? "register" : "login",
+          name: data.get("name"),
+          email: data.get("email"),
+          password: data.get("password"),
+        }),
+      });
+
       const result = await response.json();
-      if (!response.ok) { setError(result.error); return; }
+
+      if (!response.ok) {
+        setError(result.error);
+        return;
+      }
+
       onCustomer(result.customer);
-    } catch { setError("Couldn't connect. Please try again."); }
-    finally { setBusy(false); }
+    } catch {
+      setError("Couldn't connect. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
+
   async function signOut() {
     setBusy(true);
-    try { const response = await fetch("/api/auth", { method: "DELETE" }); if (response.ok) onCustomer(null); else setError("Please try signing out again."); } catch { setError("Please try again."); } finally { setBusy(false); }
+
+    try {
+      const response = await fetch("/api/auth", {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        onCustomer(null);
+      } else {
+        setError("Please try signing out again.");
+      }
+    } catch {
+      setError("Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
-  return <DialogShell title={customer ? `Hey, ${customer.name.split(" ")[0]}.` : register ? "Make yourself at home." : "Good to see you."} kicker="YOUR LITTLE CORNER OF NIKHATU" onClose={onClose} drawer className="account-panel">{customer ? <div className="signed-in-content"><div className="customer-card"><UserRound size={28} strokeWidth={1} /><div><strong>{customer.name}</strong><span>{customer.email}</span></div></div><h3>Your orders.</h3>{loadingOrders ? <p className="muted">Finding your good choices…</p> : orders.length ? <div className="account-orders">{[...orders].reverse().map((order) => <div key={order.orderNumber}><Package size={22} strokeWidth={1} /><span><strong>{order.orderNumber}</strong><small>{new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} · {order.status}</small></span><b>{formatPrice(order.total)}</b></div>)}</div> : <div className="no-orders"><Package size={35} strokeWidth={.9} /><p>No orders yet. Your first favourite is out there.</p><Link className="underlined-link" href="/shop" onClick={onClose}>LET'S FIND IT <ArrowRight size={14} /></Link></div>}{error && <p className="form-error" role="alert">{error}</p>}<button className="sign-out" disabled={busy} onClick={signOut}><LogOut size={16} /> {busy ? "SIGNING OUT…" : "SIGN OUT"}</button></div> : <><p className="account-intro">{register ? "Join the circle. Save your favourites and keep all your good choices in one place." : "Sign in to see your orders and make your next everyday a little easier."}</p><div className="account-tabs"><button className={!register ? "active" : ""} onClick={() => { setRegister(false); setError(""); }}>Sign in</button><button className={register ? "active" : ""} onClick={() => { setRegister(true); setError(""); }}>Create account</button></div><form className="account-form" onSubmit={submit}>{register && <label>YOUR NAME<input name="name" autoComplete="name" required placeholder="What should we call you?" maxLength={100} /></label>}<label>EMAIL ADDRESS<input name="email" type="email" autoComplete="email" required placeholder="you@example.com" maxLength={254} /></label><label>PASSWORD<input name="password" type="password" autoComplete={register ? "new-password" : "current-password"} required minLength={8} maxLength={128} placeholder={register ? "At least 8 characters" : "Your password"} /></label>{error && <p className="form-error" role="alert">{error}</p>}<button className="button button-dark" disabled={busy} type="submit">{busy ? "ONE MOMENT…" : register ? "JOIN THE NIKHATU CIRCLE" : "SIGN IN"}<ArrowRight size={16} /></button></form><span className="secure-note"><LockKeyhole size={12} /> YOUR ACCOUNT. ALWAYS PRIVATE.</span></>}</DialogShell>;
+
+  /*
+   * Stable local reference.
+   * This prevents TypeScript from treating `customer`
+   * as possibly null inside the JSX branch.
+   */
+  const currentCustomer = customer;
+
+  return (
+    <DialogShell
+      title={
+        currentCustomer
+          ? `Hey, ${currentCustomer.name.split(" ")[0]}.`
+          : register
+            ? "Make yourself at home."
+            : "Good to see you."
+      }
+      kicker="YOUR LITTLE CORNER OF NIKHATU"
+      onClose={onClose}
+      drawer
+      className="account-panel"
+    >
+      {currentCustomer ? (
+        <div className="signed-in-content">
+          <div className="customer-card">
+            <UserRound size={28} strokeWidth={1} />
+
+            <div>
+              <strong>{currentCustomer.name}</strong>
+              <span>{currentCustomer.email}</span>
+            </div>
+          </div>
+
+          <h3>Your orders.</h3>
+
+          {loadingOrders ? (
+            <p className="muted">Finding your good choices...</p>
+          ) : orders.length ? (
+            <div className="account-orders">
+              {[...orders].reverse().map((order) => (
+                <div key={order.orderNumber}>
+                  <Package size={22} strokeWidth={1} />
+
+                  <span>
+                    <strong>{order.orderNumber}</strong>
+
+                    <small>
+                      {new Date(order.createdAt).toLocaleDateString(
+                        "en-IN",
+                        {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        },
+                      )}
+                    </small>
+                  </span>
+
+                  <strong>{formatPrice(order.total)}</strong>
+
+                  <small>{order.status}</small>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="no-orders">
+              <Package size={35} strokeWidth={0.9} />
+
+              <p>No orders yet. Your first favourite is out there.</p>
+
+              <Link
+                className="underlined-link"
+                href="/shop"
+                onClick={onClose}
+              >
+                FIND YOUR NEXT FAVOURITE
+                <ArrowRight size={14} />
+              </Link>
+            </div>
+          )}
+
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
+
+          <button
+            className="sign-out"
+            disabled={busy}
+            onClick={signOut}
+          >
+            <LogOut size={16} />
+
+            {busy ? "SIGNING OUT…" : "SIGN OUT"}
+          </button>
+        </div>
+      ) : (
+        <>
+          <p className="account-intro">
+            {register
+              ? "Join the circle. Save your favourites and keep all your good choices in one place."
+              : "Sign in to see your orders and make your next everyday a little easier."}
+          </p>
+
+          <div className="account-tabs">
+            <button
+              className={!register ? "active" : ""}
+              onClick={() => {
+                setRegister(false);
+                setError("");
+              }}
+            >
+              Sign in
+            </button>
+
+            <button
+              className={register ? "active" : ""}
+              onClick={() => {
+                setRegister(true);
+                setError("");
+              }}
+            >
+              Create account
+            </button>
+          </div>
+
+          <form className="account-form" onSubmit={submit}>
+            {register && (
+              <label>
+                YOUR NAME
+
+                <input
+                  name="name"
+                  autoComplete="name"
+                  required
+                  placeholder="What should we call you?"
+                  maxLength={100}
+                />
+              </label>
+            )}
+
+            <label>
+              EMAIL ADDRESS
+
+              <input
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                placeholder="you@example.com"
+                maxLength={254}
+              />
+            </label>
+
+            <label>
+              PASSWORD
+
+              <input
+                name="password"
+                type="password"
+                autoComplete={
+                  register ? "new-password" : "current-password"
+                }
+                required
+                minLength={8}
+                maxLength={128}
+                placeholder={
+                  register
+                    ? "At least 8 characters"
+                    : "Your password"
+                }
+              />
+            </label>
+
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
+
+            <button
+              className="button button-dark"
+              disabled={busy}
+              type="submit"
+            >
+              {busy
+                ? "ONE MOMENT…"
+                : register
+                  ? "JOIN THE NIKHATU CIRCLE"
+                  : "SIGN IN"}
+
+              <ArrowRight size={16} />
+            </button>
+          </form>
+
+          <span className="secure-note">
+            <LockKeyhole size={12} />
+            YOUR ACCOUNT. ALWAYS PRIVATE.
+          </span>
+        </>
+      )}
+    </DialogShell>
+  );
 }
 
 export function TrackPanel({ orderNumber, email, onClose }: { orderNumber: string; email: string; onClose: () => void }) {

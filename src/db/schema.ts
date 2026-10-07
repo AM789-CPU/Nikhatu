@@ -17,6 +17,24 @@ export const products = pgTable("products", {
   isActive: boolean("is_active").default(true).notNull(),
 });
 
+export const productImages = pgTable("product_images", {
+  id: text("id").primaryKey(),
+  productId: text("product_id").references(() => products.id, { onDelete: "cascade" }).notNull(),
+  url: text("url").notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isPrimary: boolean("is_primary").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [index("product_images_product_order_idx").on(table.productId, table.sortOrder)]);
+
+export const productMedia = pgTable("product_media", {
+  id: text("id").primaryKey(),
+  productId: text("product_id").references(() => products.id, { onDelete: "cascade" }).notNull(),
+  type: text("type").notNull(),
+  url: text("url").notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [index("product_media_product_type_order_idx").on(table.productId, table.type, table.sortOrder)]);
+
 export const subscribers = pgTable("subscribers", {
   email: text("email").primaryKey(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

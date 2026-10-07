@@ -1,8 +1,8 @@
 import { db } from "@/db";
 import { products } from "@/db/schema";
 import { eq } from "drizzle-orm";
-
-export type Product = typeof products.$inferSelect;
+import { attachProductImages } from "@/lib/product-images";
+import type { Product } from "@/lib/products";
 
 const catalogue: typeof products.$inferInsert[] = [
   { id: "classic-chore-jacket", name: "The Indigo Chore Jacket", description: "Heavy washed indigo denim with three utility pockets and brass buttons. A premium everyday layer that only gets better with wear.", department: "men", category: "Jackets", price: 3999, originalPrice: 4999, image: "/images/classic/chore-jacket.jpg", color: "Indigo", colorHex: "#1f3a6b", sizes: ["S", "M", "L", "XL", "XXL"], badge: "BESTSELLER", featured: true },
@@ -24,7 +24,7 @@ const catalogue: typeof products.$inferInsert[] = [
 export async function getProducts(): Promise<Product[]> {
   try {
     await db.insert(products).values(catalogue).onConflictDoNothing();
-    const rows = await db.select().from(products).where(eq(products.isActive, true));
+    const rows = await attachProductImages(await db.select().from(products).where(eq(products.isActive, true)));
     return rows.sort((a, b) => {
       const aPosition = catalogue.findIndex((product) => product.id === a.id);
       const bPosition = catalogue.findIndex((product) => product.id === b.id);
@@ -36,7 +36,7 @@ export async function getProducts(): Promise<Product[]> {
   } catch (error) {
     // No DB / tables missing: still show the storefront from the built-in catalogue.
     console.error("getProducts fell back to static catalogue:", error);
-    return catalogue.map((p) => ({ ...p, originalPrice: p.originalPrice ?? null, badge: p.badge ?? null, featured: p.featured ?? false, isActive: true })) as Product[];
+    return catalogue.map((p) => ({ ...p, originalPrice: p.originalPrice ?? null, badge: p.badge ?? null, featured: p.featured ?? false, isActive: true, images: [{ id: `legacy-${p.id}`, productId: p.id, url: p.image, sortOrder: 0, isPrimary: true, createdAt: new Date(0) }] })) as Product[];
   }
 }
 
