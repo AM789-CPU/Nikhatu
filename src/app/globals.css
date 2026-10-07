@@ -214,6 +214,22 @@ img{display:block;max-width:100%}
 .product-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px}
 .detail-photo{aspect-ratio:3/4;position:relative;background:#dbd6cc;align-self:start}
 .detail-photo>img{width:100%;height:100%;object-fit:cover;object-position:center 20%}
+.product-gallery-controls{position:fixed;left:50%;bottom:18px;z-index:101;display:flex;gap:7px;max-width:calc(100vw - 24px);overflow-x:auto;transform:translateX(-50%);padding:7px;background:#f8f7f3;border:1px solid #d8d4cd;box-shadow:0 4px 18px #0002}
+.product-gallery-controls>button{width:47px;height:55px;flex:0 0 auto;overflow:hidden;border:1px solid transparent;background:#e7e3dc}
+.product-gallery-controls>button.active{border-color:var(--orange)}
+.product-gallery-controls>button>img{width:100%;height:100%;object-fit:cover}
+.product-media-inline{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;padding-top:22px;border-top:1px solid var(--line)}
+.product-media-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.product-media-title>div{display:grid;gap:4px}
+.product-media-title span{font-size:7px;font-weight:700;color:#8a857a}
+.product-media-title strong{font-size:12px;font-weight:600}
+.product-media-title>button{display:flex;align-items:center;gap:5px;color:#77746c;font-size:9px}
+.product-spin-viewer{aspect-ratio:1/1;position:relative;overflow:hidden;background:#e6e3dc;touch-action:pan-y;cursor:ew-resize;outline:none}
+.product-spin-viewer:focus-visible{outline:2px solid var(--orange);outline-offset:3px}
+.product-spin-viewer>img{width:100%;height:100%;object-fit:contain;user-select:none}
+.product-spin-viewer>span{position:absolute;right:8px;bottom:8px;padding:5px 7px;background:#171511b8;color:#fff;font-size:8px}
+.product-video-grid{display:grid;gap:10px}
+.product-video-grid>video{width:100%;max-height:260px;background:#161616;object-fit:contain}
 .detail-photo>.product-badge{font-size:8px;top:17px;left:17px}
 .detail-information{padding:5px 0}
 .detail-information>.eyebrow{font-size:7px;letter-spacing:1px}

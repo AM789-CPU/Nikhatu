@@ -6,7 +6,7 @@ Product images are uploaded directly from the browser to a public Vercel Blob st
 
 ## Migration review
 
-The migration at `drizzle/0000_admin_management.sql` has not been applied. It contains only these additive statements:
+The migrations in `drizzle/` have not been applied. `0000_admin_management.sql` contains only these additive statements:
 
 ```sql
 ALTER TABLE "products" ADD COLUMN IF NOT EXISTS "is_active" boolean DEFAULT true NOT NULL;
@@ -27,6 +27,10 @@ CREATE INDEX IF NOT EXISTS "admin_sessions_user_idx" ON "admin_sessions" USING b
 ```
 
 The new product flag defaults existing rows to active. Admin deletion sets this flag false instead of deleting product data. The SQL does not drop, truncate, recreate, or update existing customer, session, subscriber, or order records. Review and approve before running `npm run db:migrate` against Neon.
+
+`0001_product_images.sql` adds `product_images` with a cascading foreign key to `products`, an ordering index, and a one-time backfill that associates each existing `products.image` URL as that product's primary image. It only inserts association rows for products that do not already have them; it does not modify or delete product rows or image files.
+
+`0002_product_media.sql` adds a cascading `product_media` table for ordered video URLs and 360-degree frame URLs. Existing product and image rows are not changed.
 
 ## Create the first admin
 
