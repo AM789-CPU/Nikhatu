@@ -120,6 +120,9 @@ export function TrackPanel({ orderNumber, email, onClose }: { orderNumber: strin
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [order, setOrder] = useState<OrderSummary | null>(null);
+  const statusStep: Record<string, number> = { confirmed: 0, processing: 1, shipped: 2, delivered: 3 };
+  const terminalStatus = order?.status === "cancelled" || order?.status === "returned";
+  const completedStep = order ? (statusStep[order.status] ?? -1) : -1;
   async function track(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setOrder(null);
     const data = new FormData(event.currentTarget);
@@ -131,7 +134,20 @@ export function TrackPanel({ orderNumber, email, onClose }: { orderNumber: strin
     } catch { setError("We couldn't find your order right now. Please try again."); }
     finally { setBusy(false); }
   }
-  return <DialogShell title="Good things are on the way." kicker="TRACK YOUR NIKHATU ORDER" onClose={onClose} className="track-dialog"><p className="dialog-intro">Enter your order number and the email you used at checkout.</p><form className="track-form" onSubmit={track}><label>ORDER NUMBER<input name="number" required defaultValue={orderNumber} placeholder="NK-XXXXXXXX" maxLength={30} /></label><label>EMAIL ADDRESS<input name="email" type="email" required defaultValue={email} placeholder="you@example.com" maxLength={254} /></label>{error && <p className="form-error" role="alert">{error}</p>}<button type="submit" className="button button-dark" disabled={busy}>{busy ? "FINDING YOUR ORDER…" : "TRACK MY ORDER"}<ArrowRight size={16} /></button></form>{order && <div className="tracking-result"><div className="tracking-result-header"><CheckCircle2 size={24} strokeWidth={1.2} /><div><h3>{order.orderNumber}</h3><p>Placed {new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</p></div><strong>{formatPrice(order.total)}</strong></div><div className="tracking-steps">{["Confirmed", "Preparing", "On its way", "Delivered"].map((step, index) => <div key={step} className={index === 0 ? "complete" : ""}><span>{index === 0 ? <Check size={13} /> : index + 1}</span><small>{step}</small></div>)}</div><p className="tracking-note">Your order is confirmed. Our team is getting your new favourites ready. Expected delivery: 4–7 business days.</p></div>}</DialogShell>;
+  return <DialogShell title={order?.status === "cancelled" ? "This order was cancelled." : order?.status === "returned" ? "This order was returned." : "Good things are on the way."} kicker="TRACK YOUR NIKHATU ORDER" onClose={onClose} className="track-dialog">
+    <p className="dialog-intro">Enter your order number and the email you used at checkout.</p>
+    <form className="track-form" onSubmit={track}>
+      <label>ORDER NUMBER<input name="number" required defaultValue={orderNumber} placeholder="NK-XXXXXXXX" maxLength={30} /></label>
+      <label>EMAIL ADDRESS<input name="email" type="email" required defaultValue={email} placeholder="you@example.com" maxLength={254} /></label>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      <button type="submit" className="button button-dark" disabled={busy}>{busy ? "FINDING YOUR ORDER…" : "TRACK MY ORDER"}<ArrowRight size={16} /></button>
+    </form>
+    {order && <div className="tracking-result">
+      <div className="tracking-result-header"><CheckCircle2 size={24} strokeWidth={1.2} /><div><h3>{order.orderNumber}</h3><p>Placed {new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}</p></div><strong>{formatPrice(order.total)}</strong></div>
+      <div className="tracking-steps">{["Confirmed", "Preparing", "On its way", "Delivered"].map((step, index) => <div key={step} className={index <= completedStep ? "complete" : ""}><span>{index <= completedStep ? <Check size={13} /> : index + 1}</span><small>{step}</small></div>)}</div>
+      <p className="tracking-note">{terminalStatus ? `This order is ${order.status}. Please contact our team if you need help.` : `Current status: ${order.status}. ${order.status === "delivered" ? "Your order has been delivered." : "Our team is preparing your order for its next step."}`}</p>
+    </div>}
+  </DialogShell>;
 }
 
 function SizeTable({ kids = false }: { kids?: boolean }) {

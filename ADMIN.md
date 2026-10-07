@@ -2,6 +2,8 @@
 
 The admin area uses its own account table, session table, and HTTP-only cookie. Customer accounts do not grant admin access. Set `DATABASE_URL` to the existing Neon connection string in the deployment environment. Drizzle Kit reads the same variable through `drizzle.config.ts`; no credentials are stored in the repository.
 
+Product images are uploaded directly from the browser to a public Vercel Blob store using short-lived, admin-authorized upload tokens. Connect a Blob store to the Vercel project and make `BLOB_READ_WRITE_TOKEN` available to the server runtime; the browser only receives a constrained upload token. Local development also needs this variable. Product rows continue to store only the resulting image URL.
+
 ## Migration review
 
 The migration at `drizzle/0000_admin_management.sql` has not been applied. It contains only these additive statements:

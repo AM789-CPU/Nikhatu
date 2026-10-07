@@ -1,4 +1,4 @@
-import { pgTable, text, integer, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, jsonb, boolean, index } from "drizzle-orm/pg-core";
 
 export const products = pgTable("products", {
   id: text("id").primaryKey(),
@@ -48,7 +48,7 @@ export const adminSessions = pgTable("admin_sessions", {
   tokenHash: text("token_hash").primaryKey(),
   adminUserId: text("admin_user_id").references(() => adminUsers.id, { onDelete: "cascade" }).notNull(),
   expiresAt: timestamp("expires_at").notNull(),
-});
+}, (table) => [index("admin_sessions_user_idx").on(table.adminUserId)]);
 
 export type OrderLine = { productId: string; name: string; size: string; quantity: number; price: number; image: string };
 export type ShippingAddress = { name: string; phone: string; line1: string; city: string; state: string; pincode: string };
