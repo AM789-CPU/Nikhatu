@@ -1,6 +1,10 @@
 import { db } from "@/db";
-import { products } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import {
+  productMedia,
+  productThemes,
+  products,
+} from "@/db/schema";
+import { eq, inArray } from "drizzle-orm";
 import { attachProductImages } from "@/lib/product-images";
 import type { Product } from "@/lib/products";
 
@@ -21,23 +25,154 @@ const catalogue: typeof products.$inferInsert[] = [
   { id: "monster-melancholy-thermal", name: "The Melancholy Thermal Shirt", description: "Soft white thermal with a gothic castle print and script lettering running down both sleeves.", department: "kids", category: "Thermals", price: 1599, originalPrice: 1999, image: "/images/monster/collection/melancholy-thermal.jpg", color: "White / Black", colorHex: "#e9e9e9", sizes: ["8–9 Y", "10–11 Y", "12–13 Y", "14–15 Y"], badge: "NEW IN", featured: false },
 ];
 
+async function attachThemes<T extends { id: string }>(
+  rows: T[],
+): Promise<(T & { themes: string[] })[]> {
+  if (!rows.length) return [];
+
+  const themeRows = await db
+    .select({
+      productId: productThemes.productId,
+      themeId: productThemes.themeId,
+    })
+    .from(productThemes)
+    .where(
+      inArray(
+        productThemes.productId,
+        rows.map((row) => row.id),
+      ),
+    );
+
+  const themesByProduct = new Map<string, string[]>();
+
+  for (const row of themeRows) {
+    const current = themesByProduct.get(row.productId) ?? [];
+    current.push(row.themeId);
+    themesByProduct.set(row.productId, current);
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    themes: themesByProduct.get(row.id) ?? [],
+  }));
+}
+
 export async function getProducts(): Promise<Product[]> {
   try {
     await db.insert(products).values(catalogue).onConflictDoNothing();
-    const rows = await attachProductImages(await db.select().from(products).where(eq(products.isActive, true)));
-    return rows.sort((a, b) => {
+
+    const rows = await attachProductImages(
+      await db
+        .select()
+        .from(products)
+        .where(eq(products.isActive, true)),
+    );
+
+    const themedRows = await attachThemes(rows);
+
+    return themedRows.sort((a, b) => {
       const aPosition = catalogue.findIndex((product) => product.id === a.id);
       const bPosition = catalogue.findIndex((product) => product.id === b.id);
-      if (aPosition >= 0 && bPosition >= 0) return aPosition - bPosition;
+
+      if (aPosition >= 0 && bPosition >= 0) {
+        return aPosition - bPosition;
+      }
+
       if (aPosition >= 0) return -1;
       if (bPosition >= 0) return 1;
-      return Number(b.featured) - Number(a.featured) || a.name.localeCompare(b.name);
-    });
+
+      return (
+        Number(b.featured) - Number(a.featured) ||
+        a.name.localeCompare(b.name)
+      );
+    }) as Product[];
   } catch (error) {
-    // No DB / tables missing: still show the storefront from the built-in catalogue.
     console.error("getProducts fell back to static catalogue:", error);
-    return catalogue.map((p) => ({ ...p, originalPrice: p.originalPrice ?? null, badge: p.badge ?? null, featured: p.featured ?? false, isActive: true, images: [{ id: `legacy-${p.id}`, productId: p.id, url: p.image, sortOrder: 0, isPrimary: true, createdAt: new Date(0) }] })) as Product[];
+
+    return catalogue.map((product) => ({
+      ...product,
+      originalPrice: product.originalPrice ?? null,
+      badge: product.badge ?? null,
+      featured: product.featured ?? false,
+      isActive: true,
+      images: [
+        {
+          id: `legacy-${product.id}`,
+          productId: product.id,
+          url: product.image,
+          sortOrder: 0,
+          isPrimary: true,
+          createdAt: new Date(0),
+        },
+      ],
+      themes: [
+        product.id.startsWith("monster-") ? "monster" : "classic",
+      ],
+    })) as Product[];
   }
 }
 
-export const formatPrice = (value: number) => `₹${value.toLocaleString("en-IN")}`;
+export async function getProductById(
+  id: string,
+): Promise<Product | null> {
+  if (!id || id.length > 240) return null;
+
+  try {
+    await db.insert(products).values(catalogue).onConflictDoNothing();
+
+    const [row] = await db
+      .select()
+      .from(products)
+      .where(eq(products.id, id))
+      .limit(1);
+
+    if (!row || !row.isActive) return null;
+
+    const [withImages, withMedia, withThemes] = await Promise.all([
+      attachProductImages([row]),
+      db
+        .select()
+        .from(productMedia)
+        .where(eq(productMedia.productId, id))
+        .orderBy(productMedia.sortOrder),
+      attachThemes([row]),
+    ]);
+
+    return {
+      ...withImages[0],
+      media: withMedia,
+      themes: withThemes[0]?.themes ?? [],
+    } as Product;
+  } catch (error) {
+    console.error("getProductById failed:", error);
+
+    const fallback = catalogue.find((product) => product.id === id);
+
+    if (!fallback) return null;
+
+    return {
+      ...fallback,
+      originalPrice: fallback.originalPrice ?? null,
+      badge: fallback.badge ?? null,
+      featured: fallback.featured ?? false,
+      isActive: true,
+      images: [
+        {
+          id: `legacy-${fallback.id}`,
+          productId: fallback.id,
+          url: fallback.image,
+          sortOrder: 0,
+          isPrimary: true,
+          createdAt: new Date(0),
+        },
+      ],
+      media: [],
+      themes: [
+        fallback.id.startsWith("monster-") ? "monster" : "classic",
+      ],
+    } as Product;
+  }
+}
+
+export const formatPrice = (value: number) =>
+  `₹${value.toLocaleString("en-IN")}`;

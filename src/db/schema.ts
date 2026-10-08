@@ -17,6 +17,28 @@ export const products = pgTable("products", {
   isActive: boolean("is_active").default(true).notNull(),
 });
 
+export const themes = pgTable("themes", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  slug: text("slug").notNull().unique(),
+  isActive: boolean("is_active").default(true).notNull(),
+});
+
+export const productThemes = pgTable("product_themes", {
+  productId: text("product_id")
+    .references(() => products.id, { onDelete: "cascade" })
+    .notNull(),
+
+  themeId: text("theme_id")
+    .references(() => themes.id, { onDelete: "cascade" })
+    .notNull(),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("product_themes_product_idx").on(table.productId),
+  index("product_themes_theme_idx").on(table.themeId),
+]);
+
 export const productImages = pgTable("product_images", {
   id: text("id").primaryKey(),
   productId: text("product_id").references(() => products.id, { onDelete: "cascade" }).notNull(),

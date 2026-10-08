@@ -1,6 +1,6 @@
 import { asc } from "drizzle-orm";
 import { db } from "@/db";
-import { productImages, productMedia, products } from "@/db/schema";
+import { productImages, productMedia, productThemes, products } from "@/db/schema";
 import { requireAdmin } from "@/lib/admin-auth";
 import { parseAdminProduct, parseAdminProductImages, parseAdminProductMedia } from "@/lib/admin-validation";
 import { randomUUID } from "node:crypto";
@@ -30,9 +30,39 @@ export async function POST(request: Request) {
     const mediaValue = typeof body === "object" && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>).media : undefined;
     const media = parseAdminProductMedia(mediaValue);
     if (!media) return Response.json({ error: "Add up to 2 MP4/WEBM videos and up to 36 valid 360 image frames." }, { status: 400 });
+
+const themesValue =
+  typeof body === "object" &&
+  body !== null &&
+  !Array.isArray(body)
+    ? (body as Record<string, unknown>).themes
+    : undefined;
+
+const themeIds = Array.isArray(themesValue)
+  ? themesValue.filter(
+      (theme): theme is string =>
+        theme === "classic" || theme === "monster",
+    )
+  : ["classic"];
+
+if (!themeIds.length) {
+  return Response.json(
+    { error: "Select at least one store theme." },
+    { status: 400 },
+  );
+}
+
     const primary = images.find((image) => image.isPrimary)!;
     const product = await db.transaction(async (transaction) => {
       const [created] = await transaction.insert(products).values({ id: `admin-${randomUUID()}`, ...input, image: primary.url }).returning();
+
+
+      await transaction.insert(productThemes).values(
+  [...new Set(themeIds)].map((themeId) => ({
+    productId: created.id,
+    themeId,
+  })),
+);
       const savedImages = await transaction.insert(productImages).values(images.map((image) => ({ id: randomUUID(), productId: created.id, ...image }))).returning();
       const mediaRows = [...media.videos.map((item) => ({ ...item, type: "video" })), ...media.spinFrames.map((item) => ({ ...item, type: "360" }))];
       const savedMedia = mediaRows.length ? await transaction.insert(productMedia).values(mediaRows.map((item) => ({ id: randomUUID(), productId: created.id, ...item }))).returning() : [];

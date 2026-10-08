@@ -85,6 +85,9 @@ export default function AdminDashboard({ adminName, initialProducts, initialOrde
   const [customers, setCustomers] = useState(initialCustomers);
   const [draft, setDraft] = useState<Draft>(blankDraft);
   const [galleryImages, setGalleryImages] = useState<AdminProductImageInput[]>([]);
+
+const [selectedThemes, setSelectedThemes] = useState<string[]>(["classic"]);
+
   const [initialMedia, setInitialMedia] = useState<Product["media"]>([]);
   const [mediaPayload, setMediaPayload] = useState<AdminProductMediaInput>(blankMedia);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -171,7 +174,8 @@ export default function AdminDashboard({ adminName, initialProducts, initialOrde
     setBusy(true);
     setToast(null);
     const primaryImage = galleryImages.find((image) => image.isPrimary) ?? galleryImages[0];
-    const payload = { ...draft, image: primaryImage.url, images: galleryImages.map((image, sortOrder) => ({ ...image, sortOrder })), media: mediaPayload, sizes: sizesText.split(",").map((size) => size.trim()).filter(Boolean) };
+    const payload = { ...draft, image: primaryImage.url, images: galleryImages.map((image, sortOrder) => ({ ...image, sortOrder })), media: mediaPayload, themes: selectedThemes,sizes: sizesText.split(",").map((size) => size.trim()).filter(Boolean) };
+    
     try {
       const response = await fetch(editingId ? `/api/admin/products/${encodeURIComponent(editingId)}` : "/api/admin/products", {
         method: editingId ? "PUT" : "POST",
@@ -337,7 +341,44 @@ export default function AdminDashboard({ adminName, initialProducts, initialOrde
         <label>Color hex<div className={styles.colorField}><input type="color" value={draft.colorHex} onChange={(event) => setField("colorHex", event.target.value)} /><span>{draft.colorHex.toUpperCase()}</span></div></label>
         <label className={styles.formWide}>Sizes <small>Separate sizes with commas</small><input required maxLength={800} value={sizesText} onChange={(event) => setSizesText(event.target.value)} placeholder="XS, S, M, L, XL" /></label>
       </div></section>
-      <section className={styles.formPanel}><div className={styles.formSectionHeading}><span>06</span><div><p className={styles.eyebrow}>STORE SETTINGS</p><h2>Ready for the edit</h2></div></div><div className={styles.formGrid}>
+      <section className={styles.formPanel}><div className={styles.formSectionHeading}><span>06</span><div>
+        <div className={styles.formWide}>
+  <span>Store Theme</span>
+
+  <div>
+    <label>
+      <input
+        type="checkbox"
+        checked={selectedThemes.includes("classic")}
+        onChange={(event) => {
+          setSelectedThemes((current) =>
+            event.target.checked
+              ? [...current, "classic"]
+              : current.filter((theme) => theme !== "classic"),
+          );
+        }}
+      />
+      Classic
+    </label>
+
+    <label>
+      <input
+        type="checkbox"
+        checked={selectedThemes.includes("monster")}
+        onChange={(event) => {
+          setSelectedThemes((current) =>
+            event.target.checked
+              ? [...current, "monster"]
+              : current.filter((theme) => theme !== "monster"),
+          );
+        }}
+      />
+      Monster
+    </label>
+  </div>
+</div>
+        
+        <p className={styles.eyebrow}>STORE SETTINGS</p><h2>Ready for the edit</h2></div></div><div className={styles.formGrid}>
         <label className={styles.formWide}>Badge <small>Optional</small><input maxLength={40} value={draft.badge ?? ""} onChange={(event) => setField("badge", event.target.value || null)} placeholder="NEW IN" /></label>
         <div className={styles.formWide + " " + styles.switchGroup}><label className={styles.switchRow}><input type="checkbox" checked={draft.featured} onChange={(event) => setField("featured", event.target.checked)} /><span><strong>Featured product</strong><small>Prioritize this piece in curated placements.</small></span></label><label className={styles.switchRow}><input type="checkbox" checked={draft.isActive} onChange={(event) => setField("isActive", event.target.checked)} /><span><strong>Visible in store</strong><small>Customers can discover and order this product.</small></span></label></div>
       </div></section>
