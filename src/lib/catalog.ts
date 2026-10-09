@@ -6,7 +6,7 @@ import {
   products,
 } from "@/db/schema";
 
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { attachProductImages } from "@/lib/product-images";
 
@@ -29,7 +29,6 @@ const catalogue: typeof products.$inferInsert[] = [
     badge: "BESTSELLER",
     featured: true,
   },
-
   {
     id: "classic-grey-pinstripe",
     name: "The Grey Pinstripe Shirt",
@@ -46,7 +45,6 @@ const catalogue: typeof products.$inferInsert[] = [
     badge: "NEW IN",
     featured: true,
   },
-
   {
     id: "classic-trucker",
     name: "The Burgundy Trucker Jacket",
@@ -63,7 +61,6 @@ const catalogue: typeof products.$inferInsert[] = [
     badge: "NEW IN",
     featured: true,
   },
-
   {
     id: "classic-burgundy-stripe",
     name: "The Burgundy Stripe Shirt",
@@ -80,7 +77,6 @@ const catalogue: typeof products.$inferInsert[] = [
     badge: "BESTSELLER",
     featured: true,
   },
-
   {
     id: "classic-plaid-shirt",
     name: "The Sage Plaid Shirt",
@@ -97,7 +93,6 @@ const catalogue: typeof products.$inferInsert[] = [
     badge: "NEW IN",
     featured: false,
   },
-
   {
     id: "classic-rugby-polo",
     name: "The Rugby Stripe Polo",
@@ -131,7 +126,6 @@ const catalogue: typeof products.$inferInsert[] = [
     badge: "BESTSELLER",
     featured: true,
   },
-
   {
     id: "monster-money-tee",
     name: "All We Need Is Money Tee",
@@ -148,7 +142,6 @@ const catalogue: typeof products.$inferInsert[] = [
     badge: "BESTSELLER",
     featured: true,
   },
-
   {
     id: "monster-gothic-jeans",
     name: "The Gothic Print Wide-Leg Jeans",
@@ -165,7 +158,6 @@ const catalogue: typeof products.$inferInsert[] = [
     badge: "NEW IN",
     featured: true,
   },
-
   {
     id: "monster-saints-sweatshirt",
     name: "The Saints Vintage Waffle Sweatshirt",
@@ -182,7 +174,6 @@ const catalogue: typeof products.$inferInsert[] = [
     badge: "NEW IN",
     featured: true,
   },
-
   {
     id: "monster-saint-denim-jacket",
     name: "The Saint Tears Denim Jacket",
@@ -199,7 +190,6 @@ const catalogue: typeof products.$inferInsert[] = [
     badge: "NEW IN",
     featured: false,
   },
-
   {
     id: "monster-scribble-tee",
     name: "The Scribble Graphic Tee",
@@ -216,7 +206,6 @@ const catalogue: typeof products.$inferInsert[] = [
     badge: "NEW IN",
     featured: false,
   },
-
   {
     id: "monster-starburst-jeans",
     name: "The Starburst Wide-Leg Jeans",
@@ -233,7 +222,6 @@ const catalogue: typeof products.$inferInsert[] = [
     badge: "NEW IN",
     featured: false,
   },
-
   {
     id: "monster-melancholy-thermal",
     name: "The Melancholy Thermal Shirt",
@@ -265,12 +253,59 @@ async function syncCatalogueThemes() {
     .from(productThemes)
     .where(inArray(productThemes.productId, catalogueIds));
 
+  const expectedThemeByProduct = new Map(
+    catalogue.map((product) => [
+      product.id,
+      product.id.startsWith("monster-") ? "monster" : "classic",
+    ]),
+  );
+
+  /*
+   * Every catalogue product belongs to exactly ONE default theme:
+   *
+   * classic-*  -> classic
+   * monster-*  -> monster
+   *
+   * Remove old/wrong assignments so products cannot leak
+   * into the opposite storefront.
+   */
+  const incorrect = existing.filter((row) => {
+    const expectedTheme = expectedThemeByProduct.get(row.productId);
+
+    return expectedTheme && row.themeId !== expectedTheme;
+  });
+
+  for (const row of incorrect) {
+    await db
+      .delete(productThemes)
+      .where(
+        and(
+          eq(productThemes.productId, row.productId),
+          eq(productThemes.themeId, row.themeId),
+        ),
+      );
+  }
+
+  /*
+   * Re-read after cleanup.
+   */
+  const cleaned = await db
+    .select({
+      productId: productThemes.productId,
+      themeId: productThemes.themeId,
+    })
+    .from(productThemes)
+    .where(inArray(productThemes.productId, catalogueIds));
+
   const existingKeys = new Set(
-    existing.map(
+    cleaned.map(
       (row) => `${row.productId}:${row.themeId}`,
     ),
   );
 
+  /*
+   * Add any missing correct theme assignments.
+   */
   const missing = catalogue
     .map((product) => ({
       productId: product.id,
@@ -285,9 +320,9 @@ async function syncCatalogueThemes() {
         ),
     );
 
-  if (!missing.length) return;
-
-  await db.insert(productThemes).values(missing);
+  if (missing.length) {
+    await db.insert(productThemes).values(missing);
+  }
 }
 
 async function attachThemes<T extends { id: string }>(
@@ -311,31 +346,25 @@ async function attachThemes<T extends { id: string }>(
   const themesByProduct = new Map<string, string[]>();
 
   for (const row of themeRows) {
-    const current =
-      themesByProduct.get(row.productId) ?? [];
+    const current = themesByProduct.get(row.productId) ?? [];
 
     current.push(row.themeId);
 
-    themesByProduct.set(
-      row.productId,
-      current,
-    );
+    themesByProduct.set(row.productId, current);
   }
 
   return rows.map((row) => ({
     ...row,
-    themes:
-      themesByProduct.get(row.id) ?? [],
+    themes: themesByProduct.get(row.id) ?? [],
   }));
 }
 
 export async function getProducts(): Promise<Product[]> {
   try {
-    await db
-      .insert(products)
-      .values(catalogue)
-      .onConflictDoNothing();
+    await db.insert(products).values(catalogue).onConflictDoNothing();
 
+    // Make sure every catalogue product is assigned
+    // to the correct storefront theme.
     await syncCatalogueThemes();
 
     const rows = await attachProductImages(
@@ -356,20 +385,15 @@ export async function getProducts(): Promise<Product[]> {
         (product) => product.id === b.id,
       );
 
-      if (
-        aPosition >= 0 &&
-        bPosition >= 0
-      ) {
+      if (aPosition >= 0 && bPosition >= 0) {
         return aPosition - bPosition;
       }
 
       if (aPosition >= 0) return -1;
-
       if (bPosition >= 0) return 1;
 
       return (
-        Number(b.featured) -
-          Number(a.featured) ||
+        Number(b.featured) - Number(a.featured) ||
         a.name.localeCompare(b.name)
       );
     }) as Product[];
@@ -381,8 +405,7 @@ export async function getProducts(): Promise<Product[]> {
 
     return catalogue.map((product) => ({
       ...product,
-      originalPrice:
-        product.originalPrice ?? null,
+      originalPrice: product.originalPrice ?? null,
       badge: product.badge ?? null,
       featured: product.featured ?? false,
       isActive: true,
@@ -413,11 +436,10 @@ export async function getProductById(
   if (!id || id.length > 240) return null;
 
   try {
-    await db
-      .insert(products)
-      .values(catalogue)
-      .onConflictDoNothing();
+    await db.insert(products).values(catalogue).onConflictDoNothing();
 
+    // Also repair theme assignments when a direct product
+    // page is opened before the collection page.
     await syncCatalogueThemes();
 
     const [row] = await db
@@ -426,39 +448,28 @@ export async function getProductById(
       .where(eq(products.id, id))
       .limit(1);
 
-    if (!row || !row.isActive) {
-      return null;
-    }
+    if (!row || !row.isActive) return null;
 
-    const [
-      withImages,
-      withMedia,
-      withThemes,
-    ] = await Promise.all([
-      attachProductImages([row]),
+    const [withImages, withMedia, withThemes] =
+      await Promise.all([
+        attachProductImages([row]),
 
-      db
-        .select()
-        .from(productMedia)
-        .where(
-          eq(productMedia.productId, id),
-        )
-        .orderBy(productMedia.sortOrder),
+        db
+          .select()
+          .from(productMedia)
+          .where(eq(productMedia.productId, id))
+          .orderBy(productMedia.sortOrder),
 
-      attachThemes([row]),
-    ]);
+        attachThemes([row]),
+      ]);
 
     return {
       ...withImages[0],
       media: withMedia,
-      themes:
-        withThemes[0]?.themes ?? [],
+      themes: withThemes[0]?.themes ?? [],
     } as Product;
   } catch (error) {
-    console.error(
-      "getProductById failed:",
-      error,
-    );
+    console.error("getProductById failed:", error);
 
     const fallback = catalogue.find(
       (product) => product.id === id,
@@ -468,11 +479,13 @@ export async function getProductById(
 
     return {
       ...fallback,
-      originalPrice:
-        fallback.originalPrice ?? null,
+
+      originalPrice: fallback.originalPrice ?? null,
+
       badge: fallback.badge ?? null,
-      featured:
-        fallback.featured ?? false,
+
+      featured: fallback.featured ?? false,
+
       isActive: true,
 
       images: [
